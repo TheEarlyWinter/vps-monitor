@@ -18,6 +18,7 @@ import {
 import { ServerRepository } from './server-repository.ts';
 import { CredentialVault } from '../vault/credential-vault.ts';
 import { TrafficLedger } from '../ledger/traffic-ledger.ts';
+import { SnapshotHistoryStore, type SnapshotHistoryPoint } from '../history/snapshot-history.ts';
 import { CollectorEngine } from '../collector/collector-engine.ts';
 import { UnavailableSshTransport } from '../collector/ssh-transport.ts';
 import type { SshTransport } from '../collector/ssh-transport.ts';
@@ -35,6 +36,7 @@ export class MonitorService {
   public readonly vault: CredentialVault;
   private readonly transportFactory: TransportFactory;
   private readonly ledgerStatePath: string;
+  private readonly history: SnapshotHistoryStore;
   private readonly ledgerStates = new Map<string, LedgerState>();
 
   private readonly engines = new Map<string, CollectorEngine>();
@@ -52,6 +54,7 @@ export class MonitorService {
     this.vault = vault;
     this.transportFactory = transportFactory ?? this.defaultTransportFactory;
     this.ledgerStatePath = path.join(storageDir, 'ledger-states.json');
+    this.history = new SnapshotHistoryStore(path.join(storageDir, 'snapshot-history.json'));
     this.loadLedgerStates();
   }
 
@@ -115,6 +118,7 @@ export class MonitorService {
     this.persistLedgerStates();
     this.pendingHostKeys.delete(id);
     this.lastErrors.delete(id);
+    this.history.clear(id);
     return this.repo.delete(id);
   }
 
@@ -124,6 +128,10 @@ export class MonitorService {
 
   public getLastError(id: string): ConnectionErrorDTO | null {
     return this.lastErrors.get(id) ?? null;
+  }
+
+  public getHistory(id: string, limit = 120): SnapshotHistoryPoint[] {
+    return this.history.get(id, limit);
   }
 
   public async confirmHostKey(id: string, _hostKeyPin: HostKeyPin): Promise<SnapshotDTO | null> {
@@ -205,9 +213,10 @@ export class MonitorService {
     const activeLedger = ledger;
     const transport = this.transportFactory(config);
     const engine = new CollectorEngine(config, this.vault, activeLedger, transport, {
-      onSnapshot: () => {
+      onSnapshot: (snapshot) => {
         this.lastErrors.delete(config.id);
         this.persistLedger(config.id, activeLedger);
+        this.history.record(config.id, snapshot);
       },
       onHostKeyRequired: (sId, hk) => {
         this.pendingHostKeys.set(sId, hk);

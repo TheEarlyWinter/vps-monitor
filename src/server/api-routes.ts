@@ -179,6 +179,17 @@ export function registerApiRoutes(app: any, service: MonitorService): void {
     return c.json({ ok: true, data: snap });
   });
 
+  app.get('/api/servers/:id/history', (c: any) => {
+    const id = c.req.param('id');
+    validateId(id);
+    const rawLimit = typeof c.req.query === 'function' ? c.req.query('limit') : undefined;
+    const limit = rawLimit === undefined ? 120 : Number(rawLimit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1440) {
+      throw new VpsMonitorError(ErrorCodes.INVALID_INPUT, 'Invalid history limit');
+    }
+    return c.json({ ok: true, data: service.getHistory(id, limit) });
+  });
+
   app.get('/api/snapshots/poll', (c: any) => {
     return c.json({ ok: true, data: service.getAllSnapshots() });
   });

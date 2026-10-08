@@ -267,6 +267,53 @@
       color: var(--text-muted);
     }
 
+    .trend-box {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fff;
+    }
+
+    .trend-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    .trend-row {
+      display: grid;
+      grid-template-columns: 58px 1fr 42px;
+      gap: 8px;
+      align-items: center;
+      min-height: 30px;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .trend-label {
+      color: var(--text-muted);
+    }
+
+    .trend-value {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sparkline {
+      width: 100%;
+      height: 28px;
+      overflow: visible;
+    }
+
+    .trend-empty {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
     .progress-track {
       width: 100%;
       height: 4px;
@@ -573,6 +620,9 @@
       snapshots: {},
       pendingHostKeys: {},
       errors: {},
+      history: {},
+      historyFetchedAt: 0,
+      historyServerKey: '',
       vaultInitialized: false,
       vaultUnlocked: false,
       currentPendingServerId: null
@@ -688,12 +738,31 @@
           state.snapshots = json.data.snapshots || {};
           state.pendingHostKeys = json.data.pendingHostKeys || {};
           state.errors = json.data.errors || {};
+          const historyServerKey = state.servers.map(server => server.id).sort().join('|');
+          if (historyServerKey !== state.historyServerKey || Date.now() - state.historyFetchedAt >= 30000) {
+            await refreshHistory();
+          }
           render();
           checkPendingHostKeys();
         }
       } catch (e) {
         console.error('Fetch servers failed', e);
       }
+    }
+
+    async function refreshHistory() {
+      const entries = await Promise.all(state.servers.map(async (server) => {
+        try {
+          const res = await apiFetch(`/api/servers/${encodeURIComponent(server.id)}/history?limit=60`);
+          const json = await res.json();
+          return [server.id, json.ok && Array.isArray(json.data) ? json.data : []];
+        } catch {
+          return [server.id, []];
+        }
+      }));
+      state.history = Object.fromEntries(entries);
+      state.historyFetchedAt = Date.now();
+      state.historyServerKey = state.servers.map(server => server.id).sort().join('|');
     }
 
     async function pollSnapshots() {
@@ -766,6 +835,7 @@
       const txRate = formatBytesRate(snap?.network?.txBps?.value);
 
       // 月度流量账本
+      const history = state.history[server.id] || [];
       const traffic = snap?.trafficPeriod;
       const observedTotal = traffic?.observedTotalBytes ? formatBytes(traffic.observedTotalBytes) : '未采样';
       const quotaStr = server.quotaBytes ? formatBytes(server.quotaBytes) : '未设配额';
@@ -854,6 +924,15 @@
                 ↑ ${txRate}
               </div>
             </div>
+          </div>
+
+          <div class="trend-box">
+            <div class="trend-head">
+              <span>近 1 小时趋势</span>
+              <span>${history.length} 点 · 每分钟</span>
+            </div>
+            ${renderTrendMetric('CPU', history, 'cpuBusyPercent', '#2563eb')}
+            ${renderTrendMetric('内存', history, 'memoryUsedPercent', '#7c3aed')}
           </div>
 
           <!-- 月度流量账本 -->
@@ -1017,6 +1096,33 @@
     function formatBytesRate(bpsStr) {
       if (!bpsStr) return '0 B/s';
       return `${formatBytes(bpsStr)}/s`;
+    }
+
+    function renderSparkline(points, key, color) {
+      const values = (Array.isArray(points) ? points : [])
+        .map(point => point?.[key])
+        .filter(value => typeof value === 'number' && Number.isFinite(value));
+      if (values.length < 2) return '<span class="trend-empty">数据收集中</span>';
+
+      const width = 180;
+      const height = 28;
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = max - min || 1;
+      const coordinates = values.map((value, index) => {
+        const x = values.length === 1 ? 0 : (index * width) / (values.length - 1);
+        const y = height - 3 - ((value - min) / range) * (height - 6);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      return `<svg class="sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="趋势图"><polyline points="${coordinates}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>`;
+    }
+
+    function renderTrendMetric(label, points, key, color) {
+      const values = (Array.isArray(points) ? points : [])
+        .map(point => point?.[key])
+        .filter(value => typeof value === 'number' && Number.isFinite(value));
+      const latest = values.length ? `${values[values.length - 1].toFixed(1)}%` : '-';
+      return `<div class="trend-row"><span class="trend-label">${label}</span>${renderSparkline(points, key, color)}<span class="trend-value">${latest}</span></div>`;
     }
 
     function escapeHtml(str) {

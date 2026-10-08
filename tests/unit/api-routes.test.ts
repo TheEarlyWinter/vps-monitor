@@ -30,17 +30,19 @@ class MockHonoApp {
       if (r.method !== method) continue;
 
       // 简单参数匹配，例如 /api/servers/:id
+      const [pathname, queryString = ''] = url.split('?');
       const routeParts = r.path.split('/');
-      const urlParts = url.split('/');
-      if (routeParts.length !== urlParts.length) continue;
+      const pathParts = pathname.split('/');
+      if (routeParts.length !== pathParts.length) continue;
 
       const params: Record<string, string> = {};
+      const query = new URLSearchParams(queryString);
       let matched = true;
 
       for (let i = 0; i < routeParts.length; i++) {
         if (routeParts[i].startsWith(':')) {
-          params[routeParts[i].slice(1)] = urlParts[i];
-        } else if (routeParts[i] !== urlParts[i]) {
+          params[routeParts[i].slice(1)] = pathParts[i];
+        } else if (routeParts[i] !== pathParts[i]) {
           matched = false;
           break;
         }
@@ -53,6 +55,7 @@ class MockHonoApp {
         const ctx = {
           req: {
             param: (k: string) => params[k],
+            query: (k: string) => query.get(k) ?? undefined,
             json: async () => body
           },
           json: (data: any, status = 200) => {
@@ -163,12 +166,24 @@ test('API Routes: 全链路服务器添加、指纹确认、采样与凭据安�
     assert.strictEqual(snap.connectionState, 'online');
     assert.strictEqual(snap.memory.usedPercent.value, 83.64);
 
+    const historyRes = await app.dispatch('GET', '/api/servers/srv-test-cloud/history?limit=5');
+    assert.strictEqual(historyRes.body.ok, true);
+    assert.ok(historyRes.body.data.length >= 1);
+    assert.ok(historyRes.body.data.length <= 5);
+    assert.equal(historyRes.body.data[0].serverId, undefined);
+    await assert.rejects(
+      () => app.dispatch('GET', '/api/servers/srv-test-cloud/history?limit=1441'),
+      /Invalid history limit/
+    );
+
     // 7. 删除服务器
     const delRes = await app.dispatch('DELETE', '/api/servers/srv-test-cloud');
     assert.strictEqual(delRes.body.ok, true);
 
     const listResAfter = await app.dispatch('GET', '/api/servers');
     assert.strictEqual(listResAfter.body.data.servers.length, 0);
+    const historyAfterDelete = await app.dispatch('GET', '/api/servers/srv-test-cloud/history');
+    assert.deepEqual(historyAfterDelete.body.data, []);
 
     // 清理 service 定时器
     await service.stopAll();
