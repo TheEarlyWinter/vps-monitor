@@ -43,7 +43,7 @@ jobs:
           version="${RELEASE_TAG#v}"
           archive="vps-monitor-${version}-hana-app.zip"
           (cd dist && zip -qr "$archive" vps-monitor-app)
-          sha256sum "dist/$archive" > "dist/$archive.sha256"
+          (cd dist && sha256sum "$archive" > "$archive.sha256")
 
       - name: Publish GitHub Release
         env:
