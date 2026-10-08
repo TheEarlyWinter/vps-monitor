@@ -63,17 +63,25 @@ export function registerApiRoutes(app: any, service: MonitorService): void {
     const snapshots: Record<string, any> = {};
     const pendingHostKeys: Record<string, any> = {};
     const errors: Record<string, any> = {};
+    const alerts: Record<string, any[]> = {};
+    const alertRules: Record<string, any> = {};
 
     for (const s of servers) {
       snapshots[s.id] = service.getSnapshot(s.id);
       pendingHostKeys[s.id] = service.getPendingHostKey(s.id);
       errors[s.id] = service.getLastError(s.id);
+      alerts[s.id] = service.getAlerts(s.id);
+      alertRules[s.id] = service.getAlertRules(s.id);
     }
 
     return c.json({
       ok: true,
-      data: { servers, snapshots, pendingHostKeys, errors }
+      data: { servers, snapshots, pendingHostKeys, errors, alerts, alertRules }
     });
+  });
+
+  app.get('/api/alerts', (c: any) => {
+    return c.json({ ok: true, data: service.getAlerts() });
   });
 
   app.post('/api/servers', async (c: any) => {
@@ -188,6 +196,33 @@ export function registerApiRoutes(app: any, service: MonitorService): void {
       throw new VpsMonitorError(ErrorCodes.INVALID_INPUT, 'Invalid history limit');
     }
     return c.json({ ok: true, data: service.getHistory(id, limit) });
+  });
+
+  app.get('/api/servers/:id/alerts', (c: any) => {
+    const id = c.req.param('id');
+    validateId(id);
+    return c.json({ ok: true, data: service.getAlerts(id) });
+  });
+
+  app.get('/api/servers/:id/alert-rules', (c: any) => {
+    const id = c.req.param('id');
+    validateId(id);
+    return c.json({ ok: true, data: service.getAlertRules(id) });
+  });
+
+  app.put('/api/servers/:id/alert-rules', async (c: any) => {
+    try {
+      const id = c.req.param('id');
+      validateId(id);
+      if (!service.getServer(id)) {
+        throw new VpsMonitorError(ErrorCodes.INVALID_INPUT, 'Unknown server id');
+      }
+      const body = await c.req.json();
+      const rules = service.setAlertRules(id, body?.rules ?? body);
+      return c.json({ ok: true, data: rules });
+    } catch (e: any) {
+      return formatError(c, e);
+    }
   });
 
   app.get('/api/snapshots/poll', (c: any) => {

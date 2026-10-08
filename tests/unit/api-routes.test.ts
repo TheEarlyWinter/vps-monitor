@@ -21,6 +21,10 @@ class MockHonoApp {
     this.routes.push({ method: 'POST', path, handler });
   }
 
+  public put(path: string, handler: Function) {
+    this.routes.push({ method: 'PUT', path, handler });
+  }
+
   public delete(path: string, handler: Function) {
     this.routes.push({ method: 'DELETE', path, handler });
   }
@@ -151,6 +155,8 @@ test('API Routes: 全链路服务器添加、指纹确认、采样与凭据安�
     assert.strictEqual(pendingHk.fingerprintSha256, validHostKey.fingerprintSha256);
     assert.strictEqual(listRes.body.data.snapshots['srv-test-cloud'], null);
     assert.strictEqual(listRes.body.data.errors['srv-test-cloud'].code, 'HOST_KEY_REQUIRED');
+    assert.equal(listRes.body.data.alertRules['srv-test-cloud'].cpuPercent, 90);
+    assert.deepEqual(listRes.body.data.alerts['srv-test-cloud'], []);
 
     // 5. 确认主机指纹
     const confirmRes = await app.dispatch('POST', '/api/servers/srv-test-cloud/confirm-host-key', {
@@ -171,6 +177,33 @@ test('API Routes: 全链路服务器添加、指纹确认、采样与凭据安�
     assert.ok(historyRes.body.data.length >= 1);
     assert.ok(historyRes.body.data.length <= 5);
     assert.equal(historyRes.body.data[0].serverId, undefined);
+
+    const updateRulesRes = await app.dispatch('PUT', '/api/servers/srv-test-cloud/alert-rules', {
+      enabled: true,
+      cpuPercent: null,
+      memoryPercent: 80,
+      diskPercent: null,
+      connectionFailures: 2
+    });
+    assert.strictEqual(updateRulesRes.body.ok, true);
+    assert.equal(updateRulesRes.body.data.memoryPercent, 80);
+
+    await app.dispatch('POST', '/api/servers/srv-test-cloud/sample');
+    const alertsRes = await app.dispatch('GET', '/api/servers/srv-test-cloud/alerts');
+    assert.equal(alertsRes.body.data.find((alert: any) => alert.kind === 'memory')?.status, 'active');
+
+    const recoveryRulesRes = await app.dispatch('PUT', '/api/servers/srv-test-cloud/alert-rules', {
+      enabled: true,
+      cpuPercent: null,
+      memoryPercent: 90,
+      diskPercent: null,
+      connectionFailures: 2
+    });
+    assert.strictEqual(recoveryRulesRes.body.ok, true);
+    await app.dispatch('POST', '/api/servers/srv-test-cloud/sample');
+    const recoveredAlertsRes = await app.dispatch('GET', '/api/servers/srv-test-cloud/alerts');
+    assert.equal(recoveredAlertsRes.body.data.find((alert: any) => alert.kind === 'memory')?.status, 'resolved');
+
     await assert.rejects(
       () => app.dispatch('GET', '/api/servers/srv-test-cloud/history?limit=1441'),
       /Invalid history limit/
@@ -184,6 +217,8 @@ test('API Routes: 全链路服务器添加、指纹确认、采样与凭据安�
     assert.strictEqual(listResAfter.body.data.servers.length, 0);
     const historyAfterDelete = await app.dispatch('GET', '/api/servers/srv-test-cloud/history');
     assert.deepEqual(historyAfterDelete.body.data, []);
+    const alertsAfterDelete = await app.dispatch('GET', '/api/servers/srv-test-cloud/alerts');
+    assert.deepEqual(alertsAfterDelete.body.data, []);
 
     // 清理 service 定时器
     await service.stopAll();

@@ -19,6 +19,7 @@ import { ServerRepository } from './server-repository.ts';
 import { CredentialVault } from '../vault/credential-vault.ts';
 import { TrafficLedger } from '../ledger/traffic-ledger.ts';
 import { SnapshotHistoryStore, type SnapshotHistoryPoint } from '../history/snapshot-history.ts';
+import { AlertManager, type AlertRecord, type AlertRules } from '../alerts/alert-manager.ts';
 import { CollectorEngine } from '../collector/collector-engine.ts';
 import { UnavailableSshTransport } from '../collector/ssh-transport.ts';
 import type { SshTransport } from '../collector/ssh-transport.ts';
@@ -37,6 +38,7 @@ export class MonitorService {
   private readonly transportFactory: TransportFactory;
   private readonly ledgerStatePath: string;
   private readonly history: SnapshotHistoryStore;
+  private readonly alerts: AlertManager;
   private readonly ledgerStates = new Map<string, LedgerState>();
 
   private readonly engines = new Map<string, CollectorEngine>();
@@ -55,6 +57,7 @@ export class MonitorService {
     this.transportFactory = transportFactory ?? this.defaultTransportFactory;
     this.ledgerStatePath = path.join(storageDir, 'ledger-states.json');
     this.history = new SnapshotHistoryStore(path.join(storageDir, 'snapshot-history.json'));
+    this.alerts = new AlertManager(path.join(storageDir, 'alert-state.json'));
     this.loadLedgerStates();
   }
 
@@ -119,6 +122,7 @@ export class MonitorService {
     this.pendingHostKeys.delete(id);
     this.lastErrors.delete(id);
     this.history.clear(id);
+    this.alerts.removeServer(id);
     return this.repo.delete(id);
   }
 
@@ -132,6 +136,18 @@ export class MonitorService {
 
   public getHistory(id: string, limit = 120): SnapshotHistoryPoint[] {
     return this.history.get(id, limit);
+  }
+
+  public getAlertRules(id: string): AlertRules {
+    return this.alerts.getRules(id);
+  }
+
+  public setAlertRules(id: string, rules: unknown): AlertRules {
+    return this.alerts.setRules(id, rules);
+  }
+
+  public getAlerts(id?: string): AlertRecord[] {
+    return this.alerts.list(id);
   }
 
   public async confirmHostKey(id: string, _hostKeyPin: HostKeyPin): Promise<SnapshotDTO | null> {
@@ -217,6 +233,7 @@ export class MonitorService {
         this.lastErrors.delete(config.id);
         this.persistLedger(config.id, activeLedger);
         this.history.record(config.id, snapshot);
+        this.alerts.onSnapshot(config.id, snapshot);
       },
       onHostKeyRequired: (sId, hk) => {
         this.pendingHostKeys.set(sId, hk);
@@ -227,11 +244,13 @@ export class MonitorService {
         });
       },
       onError: (sId, error) => {
+        const at = new Date().toISOString();
         this.lastErrors.set(sId, {
           code: error.code,
           message: error.message,
-          at: new Date().toISOString()
+          at
         });
+        this.alerts.onError(sId, error, at);
       }
     });
 

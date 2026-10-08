@@ -10,6 +10,8 @@
 - 两台 VPS 的真实采样已验证：`online / collecting`。
 - 服务器卡片支持 CPU/内存近 1 小时趋势图；历史按分钟采样，每台最多保留 1440 个点。
 - 历史查询接口：`GET /api/servers/:id/history?limit=120`，`limit` 范围为 1–1440。
+- 支持 CPU、内存、系统盘阈值和连续连接失败告警；规则可在服务器卡片配置，告警会去重并记录恢复状态。
+- 告警接口：`GET /api/servers/:id/alerts`、`GET/PUT /api/servers/:id/alert-rules`。
 - 仓库不包含任何服务器地址配置、SSH 凭据、主口令或凭据库数据。
 
 这不是通用桌面 SSH 客户端；运行需要 HanaAgent 的 App runtime 能力。其他用户可以使用，但必须在自己的 HanaAgent 中安装，并自行填写 VPS 配置、凭据和主机指纹。
@@ -71,6 +73,7 @@ npm run pack:app -- --output ../vps-monitor-app
 - 每个服务器拥有独立 managed runtime service，避免并行采集互相冲突。
 - 历史指标仅保存采样时间、CPU、内存、系统盘和网络速率，不保存密码、私钥、主机地址或完整 SSH 输出。
 - 历史文件使用临时文件写入后原子替换，并限制为本地用户可读写。
+- 告警状态与规则保存在本地 `alert-state.json`；首版只提供 App 内状态展示，不向外部消息平台发送通知。
 
 ## 许可证
 

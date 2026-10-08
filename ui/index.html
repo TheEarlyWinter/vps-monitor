@@ -261,6 +261,43 @@
       line-height: 1.45;
     }
 
+    .alert-box {
+      margin-top: 10px;
+      padding: 9px 10px;
+      border: 1px solid #f2b8b5;
+      border-radius: 8px;
+      color: #8a1c1c;
+      background: #fff7f6;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .alert-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .alert-item + .alert-item {
+      margin-top: 4px;
+    }
+
+    .alert-recovered {
+      margin-top: 5px;
+      color: #166534;
+      font-size: 11px;
+    }
+
+    .alert-settings {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 10px;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
     .metric-sub {
       font-family: var(--mono);
       font-size: 11px;
@@ -564,6 +601,46 @@
     </div>
   </div>
 
+  <!-- 告警规则弹窗 -->
+  <div class="modal-overlay hidden" id="alertModal">
+    <div class="modal">
+      <h3>告警规则</h3>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+        阈值达到或超过时触发；CPU、内存、系统盘留空可关闭对应指标。连接失败按连续失败次数触发。
+      </p>
+      <form id="alertForm" onsubmit="handleSaveAlertRules(event)">
+        <div class="form-group">
+          <label><input type="checkbox" id="alertEnabled" /> 启用告警</label>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>CPU 阈值 (%)</label>
+            <input class="form-input" type="number" id="alertCpu" min="1" max="100" step="0.1" placeholder="关闭" />
+          </div>
+          <div class="form-group">
+            <label>内存阈值 (%)</label>
+            <input class="form-input" type="number" id="alertMemory" min="1" max="100" step="0.1" placeholder="关闭" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>系统盘阈值 (%)</label>
+            <input class="form-input" type="number" id="alertDisk" min="1" max="100" step="0.1" placeholder="关闭" />
+          </div>
+          <div class="form-group">
+            <label>连续失败次数</label>
+            <input class="form-input" type="number" id="alertFailures" min="1" max="20" step="1" required />
+          </div>
+        </div>
+        <div class="inline-error" id="alertError" role="alert" aria-live="polite"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('alertModal')">取消</button>
+          <button type="submit" class="btn btn-primary">保存规则</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- TOFU 指纹确认弹窗 -->
   <div class="modal-overlay hidden" id="hostKeyModal">
     <div class="modal">
@@ -620,6 +697,8 @@
       snapshots: {},
       pendingHostKeys: {},
       errors: {},
+      alerts: {},
+      alertRules: {},
       history: {},
       historyFetchedAt: 0,
       historyServerKey: '',
@@ -738,6 +817,8 @@
           state.snapshots = json.data.snapshots || {};
           state.pendingHostKeys = json.data.pendingHostKeys || {};
           state.errors = json.data.errors || {};
+          state.alerts = json.data.alerts || {};
+          state.alertRules = json.data.alertRules || {};
           const historyServerKey = state.servers.map(server => server.id).sort().join('|');
           if (historyServerKey !== state.historyServerKey || Date.now() - state.historyFetchedAt >= 30000) {
             await refreshHistory();
@@ -801,6 +882,10 @@
 
     function renderServerCard(server, snap) {
       const error = state.errors[server.id];
+      const serverAlerts = state.alerts[server.id] || [];
+      const activeAlerts = serverAlerts.filter(alert => alert.status === 'active');
+      const recoveredAlerts = serverAlerts.filter(alert => alert.status === 'resolved').slice(0, 2);
+      const alertRules = state.alertRules[server.id];
       const hostKeyPending = Boolean(state.pendingHostKeys[server.id]);
       const connState = snap?.connectionState || (!state.vaultUnlocked ? 'credential_locked' : (server.enabled ? 'connecting' : 'disabled'));
       const statusLabel = hostKeyPending ? 'host_key_required' : (error?.code || connState);
@@ -861,6 +946,13 @@
             </div>
           </div>
           ${error ? `<div class="connection-error"><strong>${escapeHtml(error.code)}</strong> · ${escapeHtml(error.message)}</div>` : ''}
+          ${activeAlerts.length ? `
+            <div class="alert-box" role="status">
+              <strong>活动告警</strong>
+              ${activeAlerts.map(alert => `<div class="alert-item"><span>${escapeHtml(alert.message)}</span><span>${escapeHtml(alertKindLabel(alert.kind))}</span></div>`).join('')}
+            </div>
+          ` : ''}
+          ${recoveredAlerts.length ? `<div class="alert-recovered">最近恢复：${recoveredAlerts.map(alert => escapeHtml(alert.message)).join(' · ')}</div>` : ''}
 
           <div class="metric-rows">
             <!-- CPU -->
@@ -924,6 +1016,11 @@
                 ↑ ${txRate}
               </div>
             </div>
+          </div>
+
+          <div class="alert-settings">
+            <span>告警：${escapeHtml(formatAlertRules(alertRules))}</span>
+            <button class="btn btn-sm" onclick="openAlertModal('${escapeHtml(server.id)}')">设置</button>
           </div>
 
           <div class="trend-box">
@@ -1008,6 +1105,77 @@
       if (!confirm('确认删除此服务器监控与历史账本？')) return;
       await apiFetch(`/api/servers/${id}`, { method: 'DELETE' });
       await refreshData();
+    }
+
+    function alertKindLabel(kind) {
+      return kind === 'cpu' ? 'CPU' : kind === 'memory' ? '内存' : kind === 'disk' ? '系统盘' : '连接';
+    }
+
+    function formatAlertRules(rules) {
+      if (!rules || !rules.enabled) return '已关闭';
+      const threshold = value => value === null || value === undefined ? '—' : `${value}%`;
+      return `CPU ${threshold(rules.cpuPercent)} · 内存 ${threshold(rules.memoryPercent)} · 磁盘 ${threshold(rules.diskPercent)} · 失败 ${rules.connectionFailures} 次`;
+    }
+
+    function openAlertModal(id) {
+      const rules = state.alertRules[id] || {
+        enabled: true,
+        cpuPercent: 90,
+        memoryPercent: 90,
+        diskPercent: 90,
+        connectionFailures: 3
+      };
+      state.currentAlertServerId = id;
+      document.getElementById('alertEnabled').checked = rules.enabled;
+      document.getElementById('alertCpu').value = rules.cpuPercent ?? '';
+      document.getElementById('alertMemory').value = rules.memoryPercent ?? '';
+      document.getElementById('alertDisk').value = rules.diskPercent ?? '';
+      document.getElementById('alertFailures').value = rules.connectionFailures;
+      document.getElementById('alertError').innerText = '';
+      document.getElementById('alertModal').classList.remove('hidden');
+    }
+
+    function readNullableAlertNumber(id) {
+      const raw = document.getElementById(id).value.trim();
+      if (!raw) return null;
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value < 1 || value > 100) throw new Error('指标阈值必须在 1-100 之间');
+      return value;
+    }
+
+    async function handleSaveAlertRules(e) {
+      e.preventDefault();
+      const errorBox = document.getElementById('alertError');
+      errorBox.innerText = '';
+      if (!state.currentAlertServerId) return;
+      try {
+        const connectionFailures = Number(document.getElementById('alertFailures').value);
+        if (!Number.isInteger(connectionFailures) || connectionFailures < 1 || connectionFailures > 20) {
+          throw new Error('连续失败次数必须在 1-20 之间');
+        }
+        const body = {
+          enabled: document.getElementById('alertEnabled').checked,
+          cpuPercent: readNullableAlertNumber('alertCpu'),
+          memoryPercent: readNullableAlertNumber('alertMemory'),
+          diskPercent: readNullableAlertNumber('alertDisk'),
+          connectionFailures
+        };
+        const res = await apiFetch(`/api/servers/${encodeURIComponent(state.currentAlertServerId)}/alert-rules`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const json = await res.json();
+        if (!json.ok) {
+          errorBox.innerText = json.error?.message || '保存告警规则失败';
+          return;
+        }
+        closeModal('alertModal');
+        state.currentAlertServerId = null;
+        await refreshData();
+      } catch (err) {
+        errorBox.innerText = err?.message || '保存告警规则失败';
+      }
     }
 
     function openAddServerModal() {
@@ -1145,6 +1313,8 @@
     window.confirmHostKeyAction = confirmHostKeyAction;
     window.triggerSample = triggerSample;
     window.deleteServer = deleteServer;
+    window.openAlertModal = openAlertModal;
+    window.handleSaveAlertRules = handleSaveAlertRules;
     window.toggleAuthFields = toggleAuthFields;
     window.handleSaveServer = handleSaveServer;
 
