@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+*.log
+*.tmp.*
+.data/
+.vps-ssh-runtime-*.json
+.env
+.env.*
+*.pem
+*.key
+**/vault.enc.json
+**/servers.json
+.DS_Store

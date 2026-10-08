@@ -1,0 +1,25 @@
+{
+  "name": "vps-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agentless VPS monitor for HanaAgent V2",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@hana/app-sdk": "file:./vendor/hana-app-sdk.tgz",
+    "ssh2": "1.17.0"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/**/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "check:runtime": "node --check runtime/ssh-service.mjs",
+    "pack:app": "node scripts/package-app.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.3"
+  }
+}

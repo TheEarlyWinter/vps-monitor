@@ -1,0 +1,40 @@
+{
+  "manifestVersion": 2,
+  "id": "vps-monitor",
+  "name": "小鸡监控",
+  "version": "0.1.0",
+  "description": "零侵入、免远端探针的 Linux VPS 轻量状态监控与月度流量账本",
+  "entry": "index.js",
+  "icon": "assets/icon.svg",
+  "minAppVersion": "0.1050.9",
+  "capabilities": [
+    "app/resources.read",
+    "app/runtime.execute",
+    "app/runtime.network"
+  ],
+  "contributes": {
+    "cards": [
+      {
+        "id": "dashboard",
+        "title": "小鸡监控",
+        "description": "VPS 存活、资源监控与月度流量账本",
+        "realization": "page",
+        "siteNavEntry": true,
+        "face": {
+          "image": "assets/cover.png"
+        },
+        "pageIcon": "assets/icon.svg",
+        "route": "/index.html",
+        "detached": {
+          "route": "/index.html"
+        },
+        "detachedDefaultSize": {
+          "width": 1280,
+          "height": 850
+        },
+        "cardForm": "flush",
+        "titlebar": "solid"
+      }
+    ]
+  }
+}

@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>小鸡监控 - VPS 独立仪表盘</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --card-bg: #ffffff;
+      --border: #e4e4e7;
+      --border-dark: #18181b;
+      --text-main: #18181b;
+      --text-muted: #71717a;
+      --text-light: #a1a1aa;
+      --bar-bg: #f4f4f5;
+      --bar-fill: #27272a;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      padding: 24px 32px;
+      min-height: 100vh;
+    }
+
+    /* 顶部导航与状态栏 */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 28px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .brand h1 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-sub {
+      color: var(--text-muted);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      background: #ffffff;
+      color: var(--text-main);
+      border: 1px solid var(--border);
+    }
+
+    .btn:hover {
+      border-color: #a1a1aa;
+      background: #fafafa;
+    }
+
+    .btn-primary {
+      background: var(--text-main);
+      color: #ffffff;
+      border-color: var(--text-main);
+    }
+
+    .btn-primary:hover {
+      background: #27272a;
+      border-color: #27272a;
+    }
+
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-radius: 2px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      background: #ffffff;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+
+    .badge.online {
+      border-color: var(--border-dark);
+      color: var(--text-main);
+    }
+    .badge.online .badge-dot {
+      background: var(--border-dark);
+    }
+
+    .badge.warn {
+      border-color: #71717a;
+      color: #27272a;
+    }
+    .badge.warn .badge-dot {
+      border: 1px solid #18181b;
+      background: transparent;
+    }
+
+    /* 主网格 */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(540px, 1fr));
+      gap: 24px;
+    }
+
+    /* 空状态 */
+    .empty-state {
+      padding: 64px 32px;
+      text-align: center;
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      margin-top: 24px;
+    }
+
+    .empty-state h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      color: var(--text-muted);
+      font-size: 13px;
+      max-width: 440px;
+      margin: 0 auto 20px;
+    }
+
+    /* 服务器卡片 */
+    .server-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .server-meta h2 {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .server-endpoint {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .server-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* 指标面板区 */
+    .metric-rows {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px 16px;
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 14px 16px;
+    }
+
+    .metric-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .metric-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .metric-value {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-main);
+    }
+
+    .connection-error {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border: 1px solid #d4d4d8;
+      border-radius: 8px;
+      color: #3f3f46;
+      background: #fafafa;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .metric-sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 4px;
+      background: var(--bar-bg);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 3px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--bar-fill);
+      transition: width 0.3s ease;
+    }
+
+    /* 月度流量区 */
+    .traffic-box {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 14px 16px;
+    }
+
+    .traffic-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+    }
+
+    .traffic-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+
+    .traffic-amount {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .traffic-footer {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      font-family: var(--mono);
+    }
+
+    .traffic-gap-alert {
+      margin-top: 6px;
+      font-size: 11px;
+      color: #71717a;
+      border-top: 1px dashed var(--border);
+      padding-top: 4px;
+    }
+
+    /* 弹窗遮罩与抽屉 */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      backdrop-filter: blur(1px);
+    }
+
+    .modal {
+      background: #ffffff;
+      border: 1px solid var(--border-dark);
+      border-radius: 4px;
+      width: 100%;
+      max-width: 520px;
+      padding: 24px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+
+    .modal h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 5px;
+      color: var(--text-main);
+    }
+
+    .form-input, .form-select {
+      width: 100%;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: var(--mono);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #ffffff;
+      color: var(--text-main);
+    }
+
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: var(--border-dark);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .inline-error {
+      min-height: 18px;
+      margin-top: 8px;
+      color: var(--text-main);
+      font-size: 12px;
+      border-left: 2px solid var(--border-dark);
+      padding-left: 8px;
+    }
+
+    .fingerprint-box {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: #fafafa;
+      border: 1px solid var(--border);
+      padding: 10px;
+      border-radius: 4px;
+      word-break: break-all;
+      margin: 12px 0;
+      color: var(--text-main);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 顶部状态栏 -->
+  <header>
+    <div class="brand">
+      <h1>小鸡监控</h1>
+      <span class="brand-sub" id="headerSummary">0 台托管 · 0 在线</span>
+    </div>
+    <div class="header-actions">
+      <div id="vaultBadge" class="badge">
+        <span class="badge-dot"></span>
+        <span id="vaultStatusText">凭据库检查中</span>
+      </div>
+      <button class="btn btn-sm" id="btnUnlockVault" onclick="openVaultModal()">解锁凭据库</button>
+      <button class="btn btn-primary" onclick="openAddServerModal()">+ 添加服务器</button>
+    </div>
+  </header>
+
+  <!-- 仪表盘主区域 -->
+  <main id="mainContainer">
+    <div class="empty-state" id="emptyState">
+      <h3>暂无受控 VPS</h3>
+      <p>无需远端安装探针或开立端口，Hana 通过 SSH 直接读取内核状态与流量账本。</p>
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button class="btn btn-primary" onclick="openAddServerModal()">+ 添加第一台 VPS</button>
+      </div>
+    </div>
+
+    <div class="grid hidden" id="serverGrid"></div>
+  </main>
+
+  <!-- 添加/编辑服务器弹窗 -->
+  <div class="modal-overlay hidden" id="serverModal">
+    <div class="modal">
+      <h3 id="modalTitle">添加 VPS 服务器</h3>
+      <form id="serverForm" onsubmit="handleSaveServer(event)">
+        <input type="hidden" id="serverId" />
+        <div class="form-group">
+          <label>服务器显示名称</label>
+          <input class="form-input" id="serverName" placeholder="例如：美西生产主力机" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>主机地址 (IPv4 / IPv6 / 域名)</label>
+            <input class="form-input" id="serverHost" placeholder="198.51.100.1" required />
+          </div>
+          <div class="form-group">
+            <label>SSH 端口</label>
+            <input class="form-input" type="number" id="serverPort" value="22" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>登录用户名</label>
+            <input class="form-input" id="serverUsername" value="root" required />
+          </div>
+          <div class="form-group">
+            <label>认证方式</label>
+            <select class="form-select" id="serverAuthKind" onchange="toggleAuthFields()">
+              <option value="password">密码认证</option>
+              <option value="privateKey">私钥认证 (PEM)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" id="pwdGroup">
+          <label>SSH 密码</label>
+          <input class="form-input" type="password" id="serverPassword" placeholder="留空则保持既有凭据" />
+        </div>
+        <div class="form-group hidden" id="keyGroup">
+          <label>私钥文本 (PEM / OpenSSH)</label>
+          <textarea class="form-input" id="serverKey" rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>月度流量配额 (GB)</label>
+            <input class="form-input" type="number" id="serverQuota" placeholder="例如：1000" />
+          </div>
+          <div class="form-group">
+            <label>每月重置日 (1-31)</label>
+            <input class="form-input" type="number" id="serverResetDay" value="1" min="1" max="31" required />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('serverModal')">取消</button>
+          <button type="submit" class="btn btn-primary">保存并连接</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOFU 指纹确认弹窗 -->
+  <div class="modal-overlay hidden" id="hostKeyModal">
+    <div class="modal">
+      <h3>主机公钥指纹确认 (TOFU)</h3>
+      <p style="font-size: 13px; color: var(--text-muted);">
+        正在首次连接或核验发生变化的远端 SSH 服务，请核对公钥指纹。确认前密码不会发送给远端服务器：
+      </p>
+      <div class="fingerprint-box" id="hostKeyContent"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeModal('hostKeyModal')">拒绝</button>
+        <button type="button" class="btn btn-primary" onclick="confirmHostKeyAction()">信任并连接</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主口令解锁弹窗 -->
+  <div class="modal-overlay hidden" id="vaultModal">
+    <div class="modal">
+      <h3 id="vaultModalTitle">解锁本地凭据库</h3>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+        所有 SSH 密码与私钥使用 scrypt+AES-256-GCM 封装加密于本地。请输入主口令解锁：
+      </p>
+      <div class="form-group">
+        <label>本地主口令</label>
+        <input class="form-input" type="password" id="vaultPassword" placeholder="至少 8 位主口令" />
+        <div class="inline-error" id="vaultError" role="alert" aria-live="polite"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeModal('vaultModal')">取消</button>
+        <button type="button" class="btn btn-primary" onclick="submitVaultPassword()">确认解锁</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { hana } from './assets/sdk.js';
+    window.hana = hana;
+
+    // 适配 Hana 平台 API fetch
+    const apiFetch = async (url, options = {}) => {
+      try {
+        if (!window.hana?.api?.fetch) {
+          throw new Error('Hana API gateway is unavailable');
+        }
+        return await window.hana.api.fetch(url, options);
+      } catch (err) {
+        console.error(`[API Fetch Error] ${url}:`, err);
+        throw err;
+      }
+    };
+
+    let state = {
+      servers: [],
+      snapshots: {},
+      pendingHostKeys: {},
+      errors: {},
+      vaultInitialized: false,
+      vaultUnlocked: false,
+      currentPendingServerId: null
+    };
+
+    async function init() {
+      try {
+        if (window.hana?.ready) {
+          console.log('[vps-monitor] Invoking hana.ready()...');
+          await window.hana.ready();
+          console.log('[vps-monitor] hana.ready() resolved successfully.');
+        }
+      } catch (err) {
+        console.error('[vps-monitor] hana.ready() failed:', err);
+      }
+
+      await refreshVaultStatus();
+      await refreshData();
+      setInterval(pollSnapshots, 3000);
+    }
+
+    async function refreshVaultStatus() {
+      try {
+        const res = await apiFetch('/api/vault/status');
+        const json = await res.json();
+        if (json.ok) {
+          state.vaultInitialized = json.data.isInitialized;
+          state.vaultUnlocked = json.data.isUnlocked;
+          updateVaultUI();
+        }
+      } catch (e) {
+        console.error('Failed to get vault status', e);
+      }
+    }
+
+    function updateVaultUI() {
+      const badge = document.getElementById('vaultBadge');
+      const text = document.getElementById('vaultStatusText');
+      const btn = document.getElementById('btnUnlockVault');
+
+      if (!state.vaultInitialized) {
+        text.innerText = '凭据库未初始化';
+        badge.className = 'badge warn';
+        btn.innerText = '初始化口令';
+        btn.onclick = openVaultModal;
+        btn.classList.remove('hidden');
+      } else if (!state.vaultUnlocked) {
+        text.innerText = '凭据库已锁定';
+        badge.className = 'badge warn';
+        btn.innerText = '解锁凭据库';
+        btn.onclick = openVaultModal;
+        btn.classList.remove('hidden');
+      } else {
+        text.innerText = '凭据库已解锁';
+        badge.className = 'badge online';
+        btn.innerText = '锁定';
+        btn.onclick = lockVault;
+        btn.classList.remove('hidden');
+      }
+    }
+
+    async function lockVault() {
+      await apiFetch('/api/vault/lock', { method: 'POST' });
+      await refreshVaultStatus();
+      await refreshData();
+    }
+
+    function openVaultModal() {
+      document.getElementById('vaultModal').classList.remove('hidden');
+      document.getElementById('vaultModalTitle').innerText = state.vaultInitialized ? '解锁凭据库' : '设置凭据库主口令';
+    }
+
+    async function submitVaultPassword() {
+      const input = document.getElementById('vaultPassword');
+      const errorBox = document.getElementById('vaultError');
+      const pwd = input.value;
+      errorBox.innerText = '';
+      if (!pwd || pwd.length < 8) {
+        errorBox.innerText = '主口令长度需至少 8 位';
+        return;
+      }
+
+      const endpoint = state.vaultInitialized ? '/api/vault/unlock' : '/api/vault/initialize';
+      try {
+        const res = await apiFetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ masterPassword: pwd })
+        });
+        const json = await res.json();
+        if (!json.ok) {
+          errorBox.innerText = json.error?.message || '解锁/设置口令失败';
+          return;
+        }
+
+        closeModal('vaultModal');
+        input.value = '';
+        await refreshVaultStatus();
+        await refreshData();
+      } catch (err) {
+        errorBox.innerText = '请求异常：网络或接口不可达';
+      } finally {
+        if (!state.vaultUnlocked) input.value = '';
+      }
+    }
+
+    async function refreshData() {
+      try {
+        const res = await apiFetch('/api/servers');
+        const json = await res.json();
+        if (json.ok) {
+          state.servers = json.data.servers || [];
+          state.snapshots = json.data.snapshots || {};
+          state.pendingHostKeys = json.data.pendingHostKeys || {};
+          state.errors = json.data.errors || {};
+          render();
+          checkPendingHostKeys();
+        }
+      } catch (e) {
+        console.error('Fetch servers failed', e);
+      }
+    }
+
+    async function pollSnapshots() {
+      await refreshData();
+    }
+
+    function render() {
+      const emptyState = document.getElementById('emptyState');
+      const serverGrid = document.getElementById('serverGrid');
+      const summary = document.getElementById('headerSummary');
+
+      let onlineCount = 0;
+      for (const s of state.servers) {
+        const snap = state.snapshots[s.id];
+        const hostKeyPending = Boolean(state.pendingHostKeys[s.id]);
+        if (snap && snap.connectionState === 'online' && !hostKeyPending && !state.errors[s.id]) {
+          onlineCount++;
+        }
+      }
+      summary.innerText = `${state.servers.length} 台托管 · ${onlineCount} 在线`;
+
+      if (state.servers.length === 0) {
+        emptyState.classList.remove('hidden');
+        serverGrid.classList.add('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      serverGrid.classList.remove('hidden');
+
+      serverGrid.innerHTML = state.servers.map(server => {
+        const snap = state.snapshots[server.id];
+        return renderServerCard(server, snap);
+      }).join('');
+    }
+
+    function renderServerCard(server, snap) {
+      const error = state.errors[server.id];
+      const hostKeyPending = Boolean(state.pendingHostKeys[server.id]);
+      const connState = snap?.connectionState || (!state.vaultUnlocked ? 'credential_locked' : (server.enabled ? 'connecting' : 'disabled'));
+      const statusLabel = hostKeyPending ? 'host_key_required' : (error?.code || connState);
+      const isOnline = connState === 'online' && !error && !hostKeyPending;
+      const latency = snap?.sshRequestLatencyMs ? `${snap.sshRequestLatencyMs} ms` : '-';
+      
+      const cpuBusy = snap?.cpu?.busyPercent?.value !== null && snap?.cpu?.busyPercent?.value !== undefined
+        ? `${snap.cpu.busyPercent.value.toFixed(1)}%`
+        : '-';
+      const cpuPercentNum = snap?.cpu?.busyPercent?.value || 0;
+      const cores = snap?.cpu?.cores || 1;
+
+      // 内存与 SWAP
+      const memTotalMB = snap?.memory?.totalBytes?.value ? (BigInt(snap.memory.totalBytes.value) / 1048576n).toString() : '-';
+      const memUsedMB = snap?.memory?.usedBytes?.value ? (BigInt(snap.memory.usedBytes.value) / 1048576n).toString() : '-';
+      const memValue = snap?.memory?.usedPercent?.value;
+      const memPercent = typeof memValue === 'number' ? `${memValue.toFixed(1)}%` : '-';
+      const memPercentNum = typeof memValue === 'number' ? memValue : 0;
+      const swapValue = snap?.swap?.usedPercent?.value;
+      const swapPercent = typeof swapValue === 'number' ? `${swapValue.toFixed(1)}%` : (snap?.swap?.isConfigured === false ? '未配置' : '-');
+      const swapPercentNum = typeof swapValue === 'number' ? swapValue : 0;
+      const swapUsed = snap?.swap?.usedBytes?.value ? formatBytes(snap.swap.usedBytes.value) : '-';
+      const swapTotal = snap?.swap?.totalBytes?.value ? formatBytes(snap.swap.totalBytes.value) : '-';
+
+      // 磁盘
+      const rootFs = snap?.filesystems?.find(f => f.isRoot) || snap?.filesystems?.[0];
+      const diskCap = rootFs ? `${rootFs.usedPercent}%` : '-';
+      const diskPercentNum = rootFs ? rootFs.usedPercent : 0;
+
+      // 实时网络速率
+      const rxRate = formatBytesRate(snap?.network?.rxBps?.value);
+      const txRate = formatBytesRate(snap?.network?.txBps?.value);
+
+      // 月度流量账本
+      const traffic = snap?.trafficPeriod;
+      const observedTotal = traffic?.observedTotalBytes ? formatBytes(traffic.observedTotalBytes) : '未采样';
+      const quotaStr = server.quotaBytes ? formatBytes(server.quotaBytes) : '未设配额';
+      let trafficProgress = 0;
+      if (server.quotaBytes && traffic?.observedTotalBytes && BigInt(server.quotaBytes) > 0n) {
+        trafficProgress = Math.min(100, Math.round(Number(BigInt(traffic.observedTotalBytes) * 100n / BigInt(server.quotaBytes))));
+      }
+
+      return `
+        <div class="server-card">
+          <div class="card-top">
+            <div class="server-meta">
+              <h2>${escapeHtml(server.name)}</h2>
+              <div class="server-endpoint">${escapeHtml(server.host)}:${server.port} · SSH 请求耗时 ${latency}</div>
+            </div>
+            <div class="server-actions">
+              <span class="badge ${isOnline ? 'online' : 'warn'}">
+                <span class="badge-dot"></span>
+                ${escapeHtml(statusLabel)}
+              </span>
+              <button class="btn btn-sm" onclick="triggerSample('${escapeHtml(server.id)}')">采样</button>
+              <button class="btn btn-sm" onclick="deleteServer('${escapeHtml(server.id)}')">删除</button>
+            </div>
+          </div>
+          ${error ? `<div class="connection-error"><strong>${escapeHtml(error.code)}</strong> · ${escapeHtml(error.message)}</div>` : ''}
+
+          <div class="metric-rows">
+            <!-- CPU -->
+            <div class="metric-item">
+              <div class="metric-label">
+                <span>CPU (${cores} 核)</span>
+                <span>${cpuBusy}</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" style="width: ${cpuPercentNum}%"></div>
+              </div>
+              <div class="metric-sub">负载: ${snap?.load?.load1?.value ?? '-'} / ${snap?.load?.load5?.value ?? '-'}</div>
+            </div>
+
+            <!-- 内存 -->
+            <div class="metric-item">
+              <div class="metric-label">
+                <span>内存</span>
+                <span>${memPercent}</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" style="width: ${memPercentNum}%"></div>
+              </div>
+              <div class="metric-sub">${memUsedMB} / ${memTotalMB} MB</div>
+            </div>
+
+            <!-- SWAP -->
+            <div class="metric-item">
+              <div class="metric-label">
+                <span>SWAP</span>
+                <span>${swapPercent}</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" style="width: ${swapPercentNum}%"></div>
+              </div>
+              <div class="metric-sub">${swapUsed} / ${swapTotal}</div>
+            </div>
+
+            <!-- 磁盘 -->
+            <div class="metric-item">
+              <div class="metric-label">
+                <span>系统盘</span>
+                <span>${diskCap}</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" style="width: ${diskPercentNum}%"></div>
+              </div>
+              <div class="metric-sub">${escapeHtml(rootFs?.filesystem ?? '-')}</div>
+            </div>
+
+            <!-- 实时网络速率 -->
+            <div class="metric-item">
+              <div class="metric-label">
+                <span>实时速率</span>
+                <span>${snap?.network?.activeInterfaces?.[0] ?? 'NET'}</span>
+              </div>
+              <div class="metric-value" style="font-size: 12px; margin-top: 4px;">
+                ↓ ${rxRate}
+              </div>
+              <div class="metric-sub">
+                ↑ ${txRate}
+              </div>
+            </div>
+          </div>
+
+          <!-- 月度流量账本 -->
+          <div class="traffic-box">
+            <div class="traffic-head">
+              <span class="traffic-title">本月流量观测账本 (${escapeHtml(server.quotaDirection)})</span>
+              <span class="traffic-amount">${observedTotal} / ${quotaStr} (${trafficProgress}%)</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" style="width: ${trafficProgress}%"></div>
+            </div>
+            <div class="traffic-footer">
+              <span>每月 ${server.resetDay} 日重置 · ${escapeHtml(server.billingTimeZone)}</span>
+              <span>${traffic?.coverageStatus === 'continuous_since_enabled' ? '连续采样' : '已记录'}</span>
+            </div>
+            ${traffic?.gapIntervals?.length ? `
+              <div class="traffic-gap-alert">
+                提示: 周期内包含 ${traffic.gapIntervals.length} 次离线/重启断采区间，未插值估算
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function checkPendingHostKeys() {
+      for (const [sId, hk] of Object.entries(state.pendingHostKeys)) {
+        if (hk && hk.fingerprintSha256) {
+          state.currentPendingServerId = sId;
+          document.getElementById('hostKeyContent').innerText = 
+            `目标主机: ${hk.algorithm}\n指纹 (SHA256): ${hk.fingerprintSha256}\n公钥: ${hk.publicKeyBlob.slice(0, 40)}...`;
+          document.getElementById('hostKeyModal').classList.remove('hidden');
+          break;
+        }
+      }
+    }
+
+    async function confirmHostKeyAction() {
+      if (!state.currentPendingServerId) return;
+      const sId = state.currentPendingServerId;
+      const hk = state.pendingHostKeys[sId];
+
+      const res = await apiFetch(`/api/servers/${sId}/confirm-host-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hostKey: hk })
+      });
+      const json = await res.json();
+      closeModal('hostKeyModal');
+      state.currentPendingServerId = null;
+      await refreshData();
+    }
+
+    async function triggerSample(id) {
+      await apiFetch(`/api/servers/${id}/sample`, { method: 'POST' });
+      await refreshData();
+    }
+
+    async function deleteServer(id) {
+      if (!confirm('确认删除此服务器监控与历史账本？')) return;
+      await apiFetch(`/api/servers/${id}`, { method: 'DELETE' });
+      await refreshData();
+    }
+
+    function openAddServerModal() {
+      document.getElementById('serverForm').reset();
+      document.getElementById('serverId').value = '';
+      document.getElementById('modalTitle').innerText = '添加 VPS 服务器';
+      toggleAuthFields();
+      document.getElementById('serverModal').classList.remove('hidden');
+    }
+
+    function toggleAuthFields() {
+      const kind = document.getElementById('serverAuthKind').value;
+      if (kind === 'password') {
+        document.getElementById('pwdGroup').classList.remove('hidden');
+        document.getElementById('keyGroup').classList.add('hidden');
+      } else {
+        document.getElementById('pwdGroup').classList.add('hidden');
+        document.getElementById('keyGroup').classList.remove('hidden');
+      }
+    }
+
+    async function handleSaveServer(e) {
+      e.preventDefault();
+      const id = document.getElementById('serverId').value || undefined;
+      const name = document.getElementById('serverName').value;
+      const host = document.getElementById('serverHost').value;
+      const port = parseInt(document.getElementById('serverPort').value, 10);
+      const username = document.getElementById('serverUsername').value;
+      const authKind = document.getElementById('serverAuthKind').value;
+      const pwd = document.getElementById('serverPassword').value;
+      const key = document.getElementById('serverKey').value;
+      const quota = document.getElementById('serverQuota').value;
+      const resetDay = parseInt(document.getElementById('serverResetDay').value, 10);
+
+      // 配额使用十进制 GB；0 不代表“不限”，应显式留空。
+      if (quota && BigInt(quota) <= 0n) {
+        alert('流量配额必须大于 0');
+        return;
+      }
+      const quotaBytes = quota ? (BigInt(quota) * 1000000000n).toString() : null;
+
+      const payload = {
+        id,
+        name,
+        host,
+        port,
+        username,
+        authKind,
+        secret: authKind === 'password' ? pwd : key,
+        quotaBytes,
+        resetDay,
+        quotaDirection: 'sum',
+        billingTimeZone: 'America/Los_Angeles',
+        enabled: true
+      };
+
+      const res = await apiFetch('/api/servers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        alert(json.error?.message || '保存失败');
+        return;
+      }
+
+      closeModal('serverModal');
+      await refreshData();
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    function formatBytes(bytesStr) {
+      if (!bytesStr) return '0 B';
+      const b = BigInt(bytesStr);
+      if (b < 1000n) return `${b} B`;
+      if (b < 1000000n) return `${(Number(b * 100n / 1000n) / 100).toFixed(2)} KB`;
+      if (b < 1000000000n) return `${(Number(b * 100n / 1000000n) / 100).toFixed(2)} MB`;
+      if (b < 1000000000000n) return `${(Number(b * 100n / 1000000000n) / 100).toFixed(2)} GB`;
+      return `${(Number(b * 100n / 1000000000000n) / 100).toFixed(2)} TB`;
+    }
+
+    function formatBytesRate(bpsStr) {
+      if (!bpsStr) return '0 B/s';
+      return `${formatBytes(bpsStr)}/s`;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[m]));
+    }
+
+    // 显式挂载供 HTML 内联事件调用的函数 (ESM 模块作用域保护)
+    window.openVaultModal = openVaultModal;
+    window.closeModal = closeModal;
+    window.openAddServerModal = openAddServerModal;
+    window.submitVaultPassword = submitVaultPassword;
+    window.lockVault = lockVault;
+    window.confirmHostKeyAction = confirmHostKeyAction;
+    window.triggerSample = triggerSample;
+    window.deleteServer = deleteServer;
+    window.toggleAuthFields = toggleAuthFields;
+    window.handleSaveServer = handleSaveServer;
+
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
