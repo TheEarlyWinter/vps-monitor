@@ -18,6 +18,23 @@ if (!fs.existsSync(path.join(root, 'node_modules', 'ssh2', 'package.json'))) {
 
 const relative = (file) => path.relative(root, file).split(path.sep).join('/');
 const isInside = (candidate, parent) => candidate === parent || candidate.startsWith(`${parent}${path.sep}`);
+const BUNDLE_EXCLUDED_PATHS = new Set([
+  '.github',
+  '.gitignore',
+  'README.md',
+  'scripts',
+  'tests',
+  'M0阶段实施交付与核验报告.md',
+  '工程落地与阶段核验交付报告.md',
+  '技术实施规范.md'
+]);
+
+function isBundleExcluded(rel) {
+  for (const excluded of BUNDLE_EXCLUDED_PATHS) {
+    if (rel === excluded || rel.startsWith(`${excluded}/`)) return true;
+  }
+  return false;
+}
 
 function shouldSkip(source) {
   const rel = relative(source);
@@ -25,6 +42,7 @@ function shouldSkip(source) {
   if (rel === '.git' || rel.startsWith('.git/')) return true;
   if (rel === 'dist' || rel.startsWith('dist/')) return true;
   if (rel === 'node_modules/.cache' || rel.startsWith('node_modules/.cache/')) return true;
+  if (isBundleExcluded(rel)) return true;
   if (isInside(source, output)) return true;
   return false;
 }

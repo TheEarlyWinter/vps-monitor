@@ -1,6 +1,6 @@
 {
   "name": "vps-monitor",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Agentless VPS monitor for HanaAgent V2",
