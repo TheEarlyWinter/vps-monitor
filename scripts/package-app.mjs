@@ -28,6 +28,9 @@ const BUNDLE_EXCLUDED_PATHS = new Set([
   '工程落地与阶段核验交付报告.md',
   '技术实施规范.md'
 ]);
+const BUNDLE_ROOT_PATHS = new Set(['assets', 'index.js', 'manifest.json', 'runtime', 'src', 'ui', 'node_modules']);
+const appPackage = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const lockfile = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
 
 function isBundleExcluded(rel) {
   for (const excluded of BUNDLE_EXCLUDED_PATHS) {
@@ -45,6 +48,32 @@ function shouldSkip(source) {
   if (isBundleExcluded(rel)) return true;
   if (isInside(source, output)) return true;
   return false;
+}
+
+function resolvePackageLockKey(packageName) {
+  const directKey = `node_modules/${packageName}`;
+  if (lockfile.packages[directKey]) return directKey;
+  return Object.keys(lockfile.packages).find(key => key.endsWith(`/${directKey}`)) ?? null;
+}
+
+function collectRuntimePackages() {
+  const queue = Object.keys(appPackage.dependencies ?? {});
+  const packages = new Set();
+  while (queue.length > 0) {
+    const packageName = queue.shift();
+    if (!packageName || packages.has(packageName)) continue;
+    const lockKey = resolvePackageLockKey(packageName);
+    if (!lockKey) throw new Error(`Missing production dependency in lockfile: ${packageName}`);
+    packages.add(packageName);
+    const lockEntry = lockfile.packages[lockKey];
+    for (const dependency of Object.keys({
+      ...(lockEntry.dependencies ?? {}),
+      ...(lockEntry.optionalDependencies ?? {})
+    })) {
+      if (!packages.has(dependency)) queue.push(dependency);
+    }
+  }
+  return packages;
 }
 
 function copyDereferenced(source, destination) {
@@ -67,9 +96,18 @@ function copyDereferenced(source, destination) {
 
 fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(output, { recursive: true });
-for (const entry of fs.readdirSync(root)) {
+for (const entry of BUNDLE_ROOT_PATHS) {
+  if (entry === 'node_modules') continue;
   const source = path.join(root, entry);
-  if (!shouldSkip(source)) copyDereferenced(source, path.join(output, entry));
+  if (!fs.existsSync(source)) throw new Error(`Missing app bundle path: ${entry}`);
+  copyDereferenced(source, path.join(output, entry));
+}
+
+const runtimePackages = collectRuntimePackages();
+for (const packageName of runtimePackages) {
+  const source = path.join(root, 'node_modules', ...packageName.split('/'));
+  if (!fs.existsSync(source)) throw new Error(`Missing installed runtime dependency: ${packageName}`);
+  copyDereferenced(source, path.join(output, 'node_modules', ...packageName.split('/')));
 }
 
 function assertNoSymlinks(directory) {

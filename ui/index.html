@@ -521,7 +521,7 @@
   <div class="modal-overlay hidden" id="hostKeyModal">
     <div class="modal">
       <h3>主机公钥指纹确认 (TOFU)</h3>
-      <p style="font-size: 13px; color: var(--text-muted);">
+      <p id="hostKeyIntro" style="font-size: 13px; color: var(--text-muted);">
         正在首次连接或核验发生变化的远端 SSH 服务，请核对公钥指纹。确认前密码不会发送给远端服务器：
       </p>
       <div class="fingerprint-box" id="hostKeyContent"></div>
@@ -882,9 +882,22 @@
     function checkPendingHostKeys() {
       for (const [sId, hk] of Object.entries(state.pendingHostKeys)) {
         if (hk && hk.fingerprintSha256) {
+          const server = state.servers.find(item => item.id === sId);
+          const oldFingerprint = server?.hostKeyFingerprint || null;
+          const changed = Boolean(oldFingerprint && oldFingerprint !== hk.fingerprintSha256);
           state.currentPendingServerId = sId;
-          document.getElementById('hostKeyContent').innerText = 
-            `目标主机: ${hk.algorithm}\n指纹 (SHA256): ${hk.fingerprintSha256}\n公钥: ${hk.publicKeyBlob.slice(0, 40)}...`;
+          document.getElementById('hostKeyIntro').innerText = changed
+            ? '检测到这台服务器的 SSH 主机密钥发生变化。除非你已通过可信带外渠道确认，否则请拒绝连接。'
+            : '这是首次连接的 SSH 主机密钥。请通过可信带外渠道核对指纹；确认前密码不会发送给远端服务器。';
+          const context = [
+            `服务器: ${server?.name || sId}`,
+            `地址: ${server?.host || '未知'}:${server?.port || '未知'}`,
+            `算法: ${hk.algorithm}`,
+            `新指纹: ${hk.fingerprintSha256}`,
+            `公钥摘要: ${hk.publicKeyBlob.slice(0, 40)}...`
+          ];
+          if (changed) context.push(`已有指纹: ${oldFingerprint}`);
+          document.getElementById('hostKeyContent').innerText = context.join('\\n');
           document.getElementById('hostKeyModal').classList.remove('hidden');
           break;
         }
