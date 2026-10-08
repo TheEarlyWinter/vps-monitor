@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "vps-monitor",
   "name": "小鸡监控",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "零侵入、免远端探针的 Linux VPS 轻量状态监控与月度流量账本",
   "entry": "index.js",
   "icon": "assets/icon.svg",
