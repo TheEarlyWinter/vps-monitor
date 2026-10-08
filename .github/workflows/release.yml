@@ -1,0 +1,60 @@
+name: Release Hana App
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Check SSH runtime syntax
+        run: npm run check:runtime
+
+      - name: Build Hana App bundle
+        run: npm run pack:app -- --output dist/vps-monitor-app
+
+      - name: Archive bundle
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          archive="vps-monitor-${version}-hana-app.zip"
+          (cd dist && zip -qr "$archive" vps-monitor-app)
+          sha256sum "dist/$archive" > "dist/$archive.sha256"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          archive="vps-monitor-${version}-hana-app.zip"
+          gh release create "$RELEASE_TAG" \
+            "dist/$archive" \
+            "dist/$archive.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "vps-monitor $RELEASE_TAG" \
+            --generate-notes

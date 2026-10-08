@@ -40,6 +40,15 @@ npm run pack:app -- --output ../vps-monitor-app
 
 不要直接把开发目录的 `node_modules` 当作发布包；`pack:app` 会复制运行时依赖并实体化符号链接。
 
+## 直接下载 Release
+
+推送形如 `v1.0.0` 的 tag 后，GitHub Actions 会自动运行测试、打包并创建 Release，附件包含：
+
+- `vps-monitor-X.Y.Z-hana-app.zip`：可直接交给 HanaAgent 扩展管理器安装的 App 包
+- `vps-monitor-X.Y.Z-hana-app.zip.sha256`：校验文件完整性
+
+使用者不需要本地执行 `npm ci` 或打包命令；下载并解压 Release 附件后，在 HanaAgent 中安装 `vps-monitor-app` 目录即可。首次启动仍需配置自己的凭据、VPS 和主机指纹。
+
 ## 首次使用
 
 1. 打开“小鸡监控”。
